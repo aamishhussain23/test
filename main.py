@@ -347,15 +347,12 @@ async def receive_token(data: TokenData):
 
 @app.post("/datasink/{param:path}")
 async def receive_token(param: str, data: Dict):
-    return await process_data_sink(param, data)
-
-async def process_data_sink(param: str, data: Dict):
     conn = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
     cur = conn.cursor()
     query = """SELECT "sheetId", "tabId", "rows" FROM header_structure WHERE "param" = %s;"""
     cur.execute(query, (param,))
     row = cur.fetchone()
-
+    
     if row:
         query = """SELECT "token" FROM oauth_token WHERE "sheetId" = %s;"""
         cur.execute(query, (row[0],))
@@ -363,114 +360,113 @@ async def process_data_sink(param: str, data: Dict):
         access_token = token[0]
         creds = Credentials(token=access_token)
         service = build('sheets', 'v4', credentials=creds)
-
-        raw_feed = getdata(token[0], row[0], row[1], row[2])
-
-        # existing data
+        
+        raw_feed = getdata(token[0],row[0],row[1],row[2])
+        
+        #existing data
         header = raw_feed[0]
         lastrow = raw_feed[1]
 
-        # new keys cleaning
-        results = collect_keys(data, 0, header, "", [])
-
+        #new keys cleaning
+        results = collect_keys(data,0,header,"",[])
+        
         cleaned = format_keys(results[0])
 
-        # new data cleaning
+        #new data cleaning
         pos = {}
-        datarow = fill_rows(data, 0, cleaned, [], 0, "", pos)
+        datarow = fill_rows(data,0,cleaned,[],0,"",pos)
 
         cleaned_2 = getback(cleaned.copy())
-
+        
         if len(cleaned) > int(row[2]):
-            requests = [
-                {
-                    "insertDimension": {
-                        "range": {
-                            "sheetId": row[1],
-                            "dimension": "ROWS",
-                            "startIndex": int(row[2]),
-                            "endIndex": len(cleaned)
-                        },
-                        "inheritFromBefore": False  # or True depending on context
-                    }
+            requests =  [
+            {
+                "insertDimension": {
+                    "range": {
+                        "sheetId": row[1],
+                        "dimension": "ROWS",
+                        "startIndex": int(row[2]),
+                        "endIndex": len(cleaned)
+                    },
+                    "inheritFromBefore": False  # or True depending on context
                 }
+            }
             ]
-
+            
             body = {
                 'requests': requests
             }
-
-            service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=body).execute()
+            
+            service.spreadsheets().batchUpdate(spreadsheetId=row[0],body=body).execute()
 
         requests = []
-        if len(results[1]) > 0:
+        if (len(results[1])>0): 
             for j in range(len(results[1])):
                 requests.append({
                     "insertRange": {
                         "range": {
                             "sheetId": row[1],
                             "startRowIndex": len(cleaned),
-                            "endRowIndex": lastrow + len(cleaned) - int(row[2]) + 1,
-                            "startColumnIndex": results[1][j],
-                            "endColumnIndex": results[1][j] + 1,
+                            "endRowIndex": lastrow+len(cleaned)-int(row[2])+1,  
+                            "startColumnIndex": results[1][j],  
+                            "endColumnIndex": results[1][j]+1,
                         },
-                        "shiftDimension": "COLUMNS"
+                        "shiftDimension": "COLUMNS" 
                     }})
-
+            
             body = {
                 'requests': requests
             }
-            service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=body).execute()
-
-        # write the header
+            service.spreadsheets().batchUpdate(spreadsheetId=row[0],body=body).execute()
+    
+        #write the header
         requests = []
-        requests = merge(cleaned, cleaned_2)
+        requests = merge(cleaned,cleaned_2)
 
-        # write the row
-        requests.append(value_merge(datarow, lastrow + len(cleaned) - int(row[2])))
+        #write the row
+        requests.append(value_merge(datarow,lastrow+len(cleaned)-int(row[2])))
 
         clear_formatting_request = {
-            'requests': [{
-                'unmergeCells': {
-                    'range': {
-                        'sheetId': 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": len(cleaned),
-                        "startColumnIndex": 0,
-                        "endColumnIndex": len(cleaned[0])
+        'requests': [{
+            'unmergeCells': {
+                'range': {
+                    'sheetId': 0, 
+                    "startRowIndex": 0,
+                    "endRowIndex": len(cleaned),  
+                    "startColumnIndex": 0,  
+                    "endColumnIndex": len(cleaned[0])
                     },
                 }
             }]}
-
+        
         clear_values_request = {
-            'requests': [{
-                'updateCells': {
-                    'range': {
-                        'sheetId': 0,
-                        "startRowIndex": 0,
-                        "endRowIndex": len(cleaned),
-                        "startColumnIndex": 0,
-                        "endColumnIndex": len(cleaned[0])
+        'requests': [{
+            'updateCells': {
+                'range': {
+                     'sheetId': 0, 
+                    "startRowIndex": 0,
+                    "endRowIndex": len(cleaned),  
+                    "startColumnIndex": 0,  
+                    "endColumnIndex": len(cleaned[0]) 
                     },
-                    'fields': 'userEnteredValue'
-                }
+                'fields': 'userEnteredValue'
+                }   
             }]}
-
+        
         service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=clear_values_request).execute()
         service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=clear_formatting_request).execute()
 
         body = {
-            'requests': requests
+                'requests': requests
         }
-        service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=body).execute()
+        service.spreadsheets().batchUpdate(spreadsheetId=row[0],body=body).execute()
 
-        if len(results[0]) > int(row[2]):
+        if (len(results[0])>int(row[2])):
             query = """UPDATE header_structure SET "rows" = %s WHERE "sheetId" = %s AND "tabId" = %s;"""
-            cur.execute(query, (len(results[0]), row[0], row[1]))
+            cur.execute(query, (len(results[0]),row[0],row[1]))
             conn.commit()
-    conn.close()
+    
     return 0
-
 
 def getdata(token,sheetId,tabId,rows):
     access_token = token
@@ -580,9 +576,8 @@ async def handle_webhook(endpoint_id: str, request: Request):
             data = await request.json()
         except:
             data = {}
-        
-        # Call the process_data_sink function
-        await process_data_sink(endpoint_id, data)
+    else:
+        data = {}
     
     user_agent = request.headers.get('user-agent')
     method = request.method
