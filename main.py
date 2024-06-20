@@ -319,7 +319,7 @@ async def receive_token(data: TokenData):
                     'title': 'Hits',
                     'gridProperties': {
                         'rowCount': 100,
-                        'columnCount': 6  # Increase column count to 6
+                        'columnCount': 5  # Decrease column count to 5
                     }
                 }
             }
@@ -329,8 +329,8 @@ async def receive_token(data: TokenData):
         }
         service.spreadsheets().batchUpdate(spreadsheetId=data.sheetId, body=body).execute()
 
-        # Add headers to the 'Hits' sheet
-        headers = [['URL', 'Hostname', 'User Agent', 'Date/Time', 'Method', 'Data']]
+        # Add headers to the 'Hits' sheet without 'Data' column
+        headers = [['URL', 'Hostname', 'User Agent', 'Date/Time', 'Method']]
         range_name = 'Hits!A1'
         body = {
             'values': headers
@@ -343,6 +343,7 @@ async def receive_token(data: TokenData):
         ).execute()
 
     return {"status": "token received and Hits sheet ensured"}
+
 
 @app.post("/datasink/{param:path}")
 async def receive_token(param: str, data: Dict):
