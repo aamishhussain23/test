@@ -3,7 +3,6 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 from datetime import datetime
 from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import json
 import psycopg2 
@@ -33,7 +32,6 @@ class CreateEndpointRequest(BaseModel):
     sheetName : str
 
 def collect_keys(data, level=0, keys_dict=[[]], prevkey="", colchanges=[]):
-
     if level>(len(keys_dict)-1):
         if level>0:
             keys_dict.append(['']*len(keys_dict[level-1]))
@@ -43,8 +41,6 @@ def collect_keys(data, level=0, keys_dict=[[]], prevkey="", colchanges=[]):
             while y < len(keys_dict[level-1]):
                 keys_dict[level].append('')
                 y = y + 1
-
-    #print(keys_dict)
     if isinstance(data, dict):
         for key, value in data.items():
             if prevkey!= "":
@@ -55,7 +51,6 @@ def collect_keys(data, level=0, keys_dict=[[]], prevkey="", colchanges=[]):
                     y = len(keys_dict[level-1])-rev_index-1
                     if 'char$tGPT'.join(keys_dict[level][y].split('char$tGPT')[:-1])==prevkey:
                         y = y + 1
-                    #print(keys_dict)
                     keys_dict[level].insert(y,key)
                     if not isinstance(value,dict) or isinstance(value,list):
                         colchanges.append(y)
@@ -81,78 +76,54 @@ def collect_keys(data, level=0, keys_dict=[[]], prevkey="", colchanges=[]):
                             while level2<len(keys_dict)-1:
                                 keys_dict[level2+1].insert(y,'')
                                 level2 = level2+1
-                    
                 if isinstance(value,dict):
                     collect_keys(value,level+1,keys_dict,key,colchanges)
-            
                 elif isinstance(value,list):
                     for j in range(0,len(value)):
                         if isinstance(value[j],dict):
                             collect_keys(value[j],level+1,keys_dict,key,colchanges)
-
             else: 
                 if key not in keys_dict[level]:
                     keys_dict[level].append(key)
-
                 if isinstance(value,dict):
                     collect_keys(value,level+1,keys_dict,key,colchanges)
-            
                 elif isinstance(value,list):
                     for j in range(0,len(value)):
                         if isinstance(value[j],dict):
                             collect_keys(value[j],level+1,keys_dict,key,colchanges)
-
-
     return [keys_dict,colchanges]
 
 def fill_rows(data, level=0, keys_dict=[],row=[],rowlevel=0,prevkey="",pos={}):
-    
     if row == []:
         row.append(['']*len(keys_dict[0]))
-
     if rowlevel>(len(row)-1):
         row.append(['']*len(keys_dict[0]))
-
-    #print(keys_dict, level)
-    
     if isinstance(data, dict):
         for key, value in data.items():
             if prevkey!= "":
                 key = prevkey+"char$tGPT"+key
-                #print(key)
-                #print(keys_dict)
             if key in keys_dict[level]:
                 if isinstance(value,dict):
                     fill_rows(value,level+1,keys_dict,row,rowlevel,key,pos)
-            
                 elif isinstance(value,list):                                                       
                     z=0
                     if 'char$tGPT'.join(key.split('char$tGPT')[:-1]) in pos:
                         if pos['char$tGPT'.join(key.split('char$tGPT')[:-1])]>1:
                             rowlevel = pos['char$tGPT'.join(key.split('char$tGPT')[:-1])]
                             z = 1
-
-                    print(pos)
                     poslevel = rowlevel
                     starter = rowlevel
-                    print(rowlevel)
-
                     if key not in pos:
                         pos[key]=1
-                    
                     for j in range(0,len(value)):
                         if isinstance(value[j],dict):                        
                             fill_rows(value[j],level+1,keys_dict,row,poslevel,key,pos)
                             poskey = key
-                            print(row)
                             while 'char$tGPT' in poskey:  
                                 if len(poskey.split('char$tGPT')[:-1])==1:
                                     poskey = poskey.split('char$tGPT')[0]
                                 else:    
                                     poskey = 'char$tGPT'.join(poskey.split('char$tGPT')[:-1])
-                                
-                                print(starter,poslevel)
-
                                 if poskey in pos:
                                     if poslevel != rowlevel:
                                         pos[poskey] = pos[poskey] + 1
@@ -160,36 +131,27 @@ def fill_rows(data, level=0, keys_dict=[],row=[],rowlevel=0,prevkey="",pos={}):
                                         pos[poskey] = pos[poskey] + 1
                                 else:
                                     pos[poskey] = 1                            
-                            
                             poslevel = starter + pos[key]
-            
                         else:
                             index = keys_dict[level].index(key)
                             row[rowlevel][index] = repr(value)
                             break             
-                    
                 else:
                     index = keys_dict[level].index(key)
                     row[rowlevel][index] = str(value)
     else:
         index = keys_dict[level].index(key)
         row[rowlevel][index] = str(value)
-
     return row
 
-
 def format_keys(keys_dict):
-    
     max_len = max(len(keys) for keys in keys_dict)
     formatted_keys = []
-
     for keys in keys_dict:
         while len(keys) < max_len:
             keys.append('')
         formatted_keys.append(keys)
-    
     keys = formatted_keys
-
     y1 = 0
     while y1<len(keys[0]):
         y2 = 0
@@ -198,7 +160,6 @@ def format_keys(keys_dict):
             if keys[y2][y1]=='':
                 counter = counter+1
             y2 = y2 + 1
-
         if counter==len(keys):
             keys = [[row[i] for i in range(len(row)) if i != y1] for row in keys]
         else:
@@ -214,7 +175,6 @@ def getback(keys):
                 keys[y1][y2] = keys[y1][y2].split('char$tGPT')[-1]
             y2 = y2 + 1
         y1 = y1 + 1
-
     return keys    
 
 def merge(keys,keys1):
@@ -255,12 +215,11 @@ def merge(keys,keys1):
                                     'startColumnIndex': y2-count,
                                     'endColumnIndex': y2
                                     },
-                                'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
+                                'mergeType': 'MERGE_ALL'
                                 }
                             })
                     count = 1
             y2 = y2 + 1
-
         if count>1:
             requests.append({
                 'mergeCells': {
@@ -271,10 +230,9 @@ def merge(keys,keys1):
                         'startColumnIndex': y2-count,
                         'endColumnIndex': y2
                         },
-                    'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
+                    'mergeType': 'MERGE_ALL'
                     }
                 })
-            
         y1 = y1 + 1
     y1 = 0
     while y1<len(keys[0]):
@@ -295,12 +253,11 @@ def merge(keys,keys1):
                                     'startColumnIndex': y1,
                                     'endColumnIndex': y1+1
                                     },
-                                'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
+                                'mergeType': 'MERGE_ALL'
                                 }
                             })
                     count = 1
             y2 = y2 + 1
-        
         if count>1:
             requests.append({
                 'mergeCells': {
@@ -311,11 +268,10 @@ def merge(keys,keys1):
                         'startColumnIndex': y1,
                         'endColumnIndex': y1+1
                         },
-                    'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
+                    'mergeType': 'MERGE_ALL'
                     }
                 })
         y1 = y1 + 1
-
     return requests            
 
 def value_merge(rows,pos):
@@ -337,60 +293,7 @@ def value_merge(rows,pos):
         "fields": "userEnteredValue"
         }
     })
-
-    """y1 = 0
-    while y1<len(rows[0]):
-        count = 1
-        y2 = 0
-        while y2<len(rows):
-            if y2>0:
-                if rows[y2][y1]=='':
-                    count = count+1
-                else:
-                    if count>1:
-                        requests.append({
-                            'mergeCells': {
-                                'range': {
-                                    'sheetId': 0,
-                                    'startRowIndex': pos+y2-count,
-                                    'endRowIndex': pos+y2,
-                                    'startColumnIndex': y1,
-                                    'endColumnIndex': y1+1
-                                    },
-                                'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
-                                }
-                            })
-                    count = 1
-            y2 = y2 + 1
-        
-        if count>1:
-            requests.append({
-                'mergeCells': {
-                    'range': {
-                        'sheetId': 0,
-                        'startRowIndex': pos+y2-count,
-                        'endRowIndex': pos+y2,
-                        'startColumnIndex': y1,
-                        'endColumnIndex': y1+1
-                        },
-                    'mergeType': 'MERGE_ALL'  # Other options include 'MERGE_COLUMNS', 'MERGE_ROWS'
-                    }
-                })
-        y1 = y1 + 1"""
-
     return requests   
-
-# @app.post("/sendtoken")
-# async def receive_token(data: TokenData):
-    
-#     insert_query = """INSERT INTO oauth_token ("token","sheetId","utcTime") VALUES (%s, %s, %s) ON CONFLICT ("sheetId")  DO UPDATE SET "token" = EXCLUDED."token", "utcTime" = EXCLUDED."utcTime";"""
-#     data_query = (data.token,data.sheetId,datetime.now())
-#     conn_sq = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
-#     cur_sq = conn_sq.cursor()
-#     cur_sq.execute(insert_query,data_query)
-#     conn_sq.commit()
-    
-#     return 0
 
 @app.post("/sendtoken", response_model=None)
 async def receive_token(data: TokenData):
@@ -441,8 +344,6 @@ async def receive_token(data: TokenData):
 
     return {"status": "token received and Hits sheet ensured"}
 
-
-
 @app.post("/datasink/{param:path}")
 async def receive_token(param: str, data: Dict):
     conn = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
@@ -455,7 +356,6 @@ async def receive_token(param: str, data: Dict):
         query = """SELECT "token" FROM oauth_token WHERE "sheetId" = %s;"""
         cur.execute(query, (row[0],))
         token = cur.fetchone()
-        #print(token)
         access_token = token[0]
         creds = Credentials(token=access_token)
         service = build('sheets', 'v4', credentials=creds)
@@ -466,14 +366,10 @@ async def receive_token(param: str, data: Dict):
         header = raw_feed[0]
         lastrow = raw_feed[1]
 
-        #print(header)
-
         #new keys cleaning
         results = collect_keys(data,0,header,"",[])
-        #print(results)
         
         cleaned = format_keys(results[0])
-        #print(cleaned)
 
         #new data cleaning
         pos = {}
@@ -559,7 +455,6 @@ async def receive_token(param: str, data: Dict):
         service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=clear_values_request).execute()
         service.spreadsheets().batchUpdate(spreadsheetId=row[0], body=clear_formatting_request).execute()
 
-        #print(requests)
         body = {
                 'requests': requests
         }
@@ -573,7 +468,6 @@ async def receive_token(param: str, data: Dict):
     return 0
 
 def getdata(token,sheetId,tabId,rows):
-    
     access_token = token
     spreadsheet_id = sheetId
     creds = Credentials(token=access_token)
@@ -625,7 +519,7 @@ def getdata(token,sheetId,tabId,rows):
                         values[y1][y2] = values[y1][y2-1]
                     else:
                         flag = values[y1-1][y2]
-                    y2 = y2 + 1
+                    y2 = y2+1
             y1 = y1 + 1
 
         y1 = 0
@@ -673,68 +567,65 @@ async def create_endpoint(request: CreateEndpointRequest):
 
     return {"url": endpoint_url, "sheetId": request.sheetId, "sheetName" : request.sheetName}
 
-
-
-# @app.api_route("/{endpoint_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], response_model=None)
-# async def handle_webhook(endpoint_id: str, request: Request):
-#     # Fetch JSON data if present
-#     if request.method in ["POST", "PUT", "PATCH"]:
-#         try:
-#             data = await request.json()
-#         except:
-#             data = {}
-#     else:
-#         data = {}
+@app.api_route("/{endpoint_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], response_model=None)
+async def handle_webhook(endpoint_id: str, request: Request):  # Correct import for Request
+    # Fetch JSON data if present
+    if request.method in ["POST", "PUT", "PATCH"]:
+        try:
+            data = await request.json()
+        except:
+            data = {}
+    else:
+        data = {}
     
-#     user_agent = request.headers.get('user-agent')
-#     method = request.method
-#     hostname = request.client.host
-#     url = str(request.url)
-#     hit_time = datetime.now().isoformat()
+    user_agent = request.headers.get('user-agent')
+    method = request.method
+    hostname = request.client.host
+    url = str(request.url)
+    hit_time = datetime.now().isoformat()
 
-#     # Fetch the token and sheet information based on the endpoint_id
-#     conn = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
-#     cur = conn.cursor()
-#     query = """SELECT "sheetId", "tabId" FROM header_structure WHERE "param" = %s;"""
-#     cur.execute(query, (endpoint_id,))
-#     row = cur.fetchone()
+    # Fetch the token and sheet information based on the endpoint_id
+    conn = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
+    cur = conn.cursor()
+    query = """SELECT "sheetId", "tabId" FROM header_structure WHERE "param" = %s;"""
+    cur.execute(query, (endpoint_id,))
+    row = cur.fetchone()
     
-#     if not row:
-#         raise HTTPException(status_code=404, detail="Endpoint not found")
+    if not row:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
 
-#     sheet_id, tab_id = row
-#     query = """SELECT "token" FROM oauth_token WHERE "sheetId" = %s;"""
-#     cur.execute(query, (sheet_id,))
-#     token = cur.fetchone()
+    sheet_id, tab_id = row
+    query = """SELECT "token" FROM oauth_token WHERE "sheetId" = %s;"""
+    cur.execute(query, (sheet_id,))
+    token = cur.fetchone()
     
-#     if not token:
-#         raise HTTPException(status_code=404, detail="Token not found")
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
 
-#     access_token = token[0]
-#     creds = Credentials(token=access_token)
-#     service = build('sheets', 'v4', credentials=creds)
+    access_token = token[0]
+    creds = Credentials(token=access_token)
+    service = build('sheets', 'v4', credentials=creds)
 
-#     # Prepare the hit data
-#     hit_data = [
-#         [url, hostname, user_agent, hit_time, method, json.dumps(data)]
-#     ]
+    # Prepare the hit data
+    hit_data = [
+        [url, hostname, user_agent, hit_time, method, json.dumps(data)]
+    ]
 
-#     # Append the data to the 'Hits' tab
-#     sheet_name = 'Hits'
-#     range_name = f'{sheet_name}!A1'
-#     body = {
-#         'values': hit_data
-#     }
+    # Append the data to the 'Hits' tab
+    sheet_name = 'Hits'
+    range_name = f'{sheet_name}!A1'
+    body = {
+        'values': hit_data
+    }
     
-#     service.spreadsheets().values().append(
-#         spreadsheetId=sheet_id,
-#         range=range_name,
-#         valueInputOption='USER_ENTERED',
-#         body=body
-#     ).execute()
+    service.spreadsheets().values().append(
+        spreadsheetId=sheet_id,
+        range=range_name,
+        valueInputOption='USER_ENTERED',
+        body=body
+    ).execute()
 
-#     return {"status": "success", "data": hit_data}
-
+    return {"status": "success", "data": hit_data}
 
 if __name__ == "__main__":
     import uvicorn
