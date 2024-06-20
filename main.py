@@ -578,19 +578,20 @@ async def handle_webhook(endpoint_id: str, request: Request):
             data = {}
     else:
         data = {}
-
+    
     user_agent = request.headers.get('user-agent')
     method = request.method
     hostname = request.client.host
     url = str(request.url)
     hit_time = datetime.now().isoformat()
 
+    # Fetch the token and sheet information based on the endpoint_id
     conn = psycopg2.connect("postgresql://retool:yosc9BrPx5Lw@ep-silent-hill-00541089.us-west-2.retooldb.com/retool?sslmode=require")
     cur = conn.cursor()
     query = """SELECT "sheetId", "tabId" FROM header_structure WHERE "param" = %s;"""
     cur.execute(query, (endpoint_id,))
     row = cur.fetchone()
-
+    
     if not row:
         raise HTTPException(status_code=404, detail="Endpoint not found")
 
@@ -598,7 +599,7 @@ async def handle_webhook(endpoint_id: str, request: Request):
     query = """SELECT "token" FROM oauth_token WHERE "sheetId" = %s;"""
     cur.execute(query, (sheet_id,))
     token = cur.fetchone()
-
+    
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
 
@@ -606,49 +607,27 @@ async def handle_webhook(endpoint_id: str, request: Request):
     creds = Credentials(token=access_token)
     service = build('sheets', 'v4', credentials=creds)
 
-    # Prepare the hit data
-    hit_data = {
-        "url": url,
-        "hostname": hostname,
-        "user_agent": user_agent,
-        "hit_time": hit_time,
-        "method": method,
-        "data": data  # Including the JSON data
+    # Prepare the hit data without 'data' column
+    hit_data = [
+        [url, hostname, user_agent, hit_time, method]
+    ]
+
+    # Append the data to the 'Hits' tab
+    sheet_name = 'Hits'
+    range_name = f'{sheet_name}!A1'
+    body = {
+        'values': hit_data
     }
-
-    # Use collect_keys and fill_rows to prepare data
-    raw_feed = getdata(access_token, sheet_id, tab_id, 0)
-    header = raw_feed[0]
-    lastrow = raw_feed[1]
-    results = collect_keys(hit_data, 0, header, "", [])
-    cleaned = format_keys(results[0])
-    pos = {}
-    datarow = fill_rows(hit_data, 0, cleaned, [], 0, "", pos)
-    cleaned_2 = getback(cleaned.copy())
-
-    # Append the data to the sheet
-    if len(cleaned) > int(lastrow):
-        requests = [{
-            "insertDimension": {
-                "range": {
-                    "sheetId": tab_id,
-                    "dimension": "ROWS",
-                    "startIndex": int(lastrow),
-                    "endIndex": len(cleaned)
-                },
-                "inheritFromBefore": False
-            }
-        }]
-        body = {'requests': requests}
-        service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
-
-    requests = merge(cleaned, cleaned_2)
-    requests.append(value_merge(datarow, lastrow + len(cleaned) - int(lastrow)))
-
-    body = {'requests': requests}
-    service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
+    
+    service.spreadsheets().values().append(
+        spreadsheetId=sheet_id,
+        range=range_name,
+        valueInputOption='USER_ENTERED',
+        body=body
+    ).execute()
 
     return {"status": "success", "data": hit_data}
+
 
 if __name__ == "__main__":
     import uvicorn
