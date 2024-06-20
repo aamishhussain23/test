@@ -569,7 +569,7 @@ async def create_endpoint(request: CreateEndpointRequest):
     return {"url": endpoint_url, "sheetId": request.sheetId, "sheetName" : request.sheetName}
 
 @app.api_route("/{endpoint_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], response_model=None)
-async def handle_webhook(endpoint_id: str, request: Request):  # Correct import for Request
+async def handle_webhook(endpoint_id: str, request: Request):
     # Fetch JSON data if present
     if request.method in ["POST", "PUT", "PATCH"]:
         try:
@@ -607,9 +607,9 @@ async def handle_webhook(endpoint_id: str, request: Request):  # Correct import 
     creds = Credentials(token=access_token)
     service = build('sheets', 'v4', credentials=creds)
 
-    # Prepare the hit data
+    # Prepare the hit data without 'data' column
     hit_data = [
-        [url, hostname, user_agent, hit_time, method, json.dumps(data)]
+        [url, hostname, user_agent, hit_time, method]
     ]
 
     # Append the data to the 'Hits' tab
@@ -627,6 +627,7 @@ async def handle_webhook(endpoint_id: str, request: Request):  # Correct import 
     ).execute()
 
     return {"status": "success", "data": hit_data}
+
 
 if __name__ == "__main__":
     import uvicorn
